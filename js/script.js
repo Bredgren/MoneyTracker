@@ -4,6 +4,7 @@
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
   loadUrl = function(url, callback) {
+    console.log("fetching", url);
     return $.getJSON(url, callback);
   };
 
@@ -19,9 +20,12 @@
     function Main() {
       this.newApiKey = __bind(this.newApiKey, this);
       this.handleWorksheetData = __bind(this.handleWorksheetData, this);
+      this.handleDataWorksheet = __bind(this.handleDataWorksheet, this);
+      this.handleCategoryWorksheet = __bind(this.handleCategoryWorksheet, this);
       this.worksheetUrl = __bind(this.worksheetUrl, this);
       this.worksheetDataUrl = __bind(this.worksheetDataUrl, this);
       var apiKey;
+      this.category = {};
       this.data = {};
       apiKey = localStorage["apiKey"];
       this.newApiKey(this.apiKey);
@@ -37,20 +41,63 @@
     Main.prototype.worksheetUrl = function(worksheetId) {
       var token, url;
       token = gapi.auth.getToken().access_token;
-      url = this.scope + this.apiKey + "/" + worksheetId + this.access + token;
+      url = this.scope + "/list/" + this.apiKey + "/" + worksheetId + "/" + this.access + token + "&callback=?";
       return url;
     };
 
+    Main.prototype.handleCategoryWorksheet = function(jsonData) {
+      var categoryName, parentCategory, recuring, row, _i, _len, _ref, _results;
+      console.log("handleCategoryWorksheet", jsonData);
+      _ref = jsonData.feed.entry;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        row = _ref[_i];
+        categoryName = row.gsx$categoryname.$t;
+        parentCategory = row.gsx$parentcategory.$t;
+        recuring = row.gsx$recuring.$t;
+        _results.push(this.category[categoryName] = {
+          parent: parentCategory,
+          recuring: recuring
+        });
+      }
+      return _results;
+    };
+
+    Main.prototype.handleDataWorksheet = function(jsonData) {
+      var category, cost, date, notes, row, _i, _len, _ref, _results;
+      console.log("handleDataWorksheet", jsonData);
+      _ref = jsonData.feed.entry;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        row = _ref[_i];
+        date = row.gsx$date.$t;
+        category = row.gsx$category.$t;
+        cost = row.gsx$cost.$t;
+        notes = row.gsx$notes.$t;
+        _results.push(this.data[new Date(date)] = {
+          category: category,
+          cost: parseFloat(cost),
+          notes: notes
+        });
+      }
+      return _results;
+    };
+
     Main.prototype.handleWorksheetData = function(jsonData) {
-      var id, sections, worksheetData, _i, _len, _ref, _results;
+      var id, sections, title, worksheetData, _i, _len, _ref, _results;
       console.log("handleWorksheetData", jsonData);
       _ref = jsonData.feed.entry;
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         worksheetData = _ref[_i];
+        title = worksheetData.title.$t;
         sections = worksheetData.id.$t.split("/");
         id = sections[sections.length - 1];
-        _results.push(console.log(id, this.worksheetUrl(id)));
+        if (title === "Categories") {
+          _results.push(loadUrl(this.worksheetUrl(id), this.handleCategoryWorksheet));
+        } else {
+          _results.push(loadUrl(this.worksheetUrl(id), this.handleDataWorksheet));
+        }
       }
       return _results;
     };
@@ -64,6 +111,7 @@
         'scope': this.scope
       };
       this.data = {};
+      this.category = {};
       return gapi.auth.authorize(config, (function(_this) {
         return function() {
           return loadUrl(_this.worksheetDataUrl(), _this.handleWorksheetData);
@@ -77,7 +125,8 @@
 
   $("#authorize-button").click(function() {
     var m;
-    return m = new Main();
+    m = new Main();
+    return console.log(m);
   });
 
 }).call(this);
