@@ -68,6 +68,7 @@ class Main
 
   handleWorksheetData: (jsonData) =>
     console.log("handleWorksheetData", jsonData)
+    getCallback(title)
     for worksheetData in jsonData.feed.entry
       title = worksheetData.title.$t
       sections = worksheetData.id.$t.split("/")
