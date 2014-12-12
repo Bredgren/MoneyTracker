@@ -1,42 +1,50 @@
 
-# class Main
-#   constructor: ->
-#     console.log("hello")
+loadUrl = (url, callback) ->
+  $.getJSON(url, callback)
 
-# jQuery ->
-#   m = new Main()
+class Main
+  scope: "https://spreadsheets.google.com/feeds"
+  access: "private/full?alt=json-in-script&access_token="
+  clientId: "225160616080-rlae3dprbofq5i1etegg5vdvobf2rhqi.apps.googleusercontent.com"
+  apiKey: "14OPwgdy9-2uTIS-x5CDMOYcn2Yo2kuML3Fn0tVMdWrA"
 
-scopes = 'https://spreadsheets.google.com/feeds'
-clientId = '225160616080-rlae3dprbofq5i1etegg5vdvobf2rhqi.apps.googleusercontent.com'
-apiKey = '14OPwgdy9-2uTIS-x5CDMOYcn2Yo2kuML3Fn0tVMdWrA'
+  constructor: () ->
+    @data = {} # Date -> { category: string: cost: number, notes: string }
+    apiKey = localStorage["apiKey"]
+    # if apiKey
+    #   @newApiKey(apiKey)
+    @newApiKey(@apiKey)
 
-handleClientLoad = () ->
-  console.log("handleClientLoad")
-  gapi.client.setApiKey(apiKey)
-  window.setTimeout(checkAuth, 1)
-
-checkAuth = () ->
-  console.log('checkAuth')
-  gapi.auth.authorize({client_id: clientId, scope: scopes, immediate: true}, handleAuthResult)
-  console.log('finished checkAuth')
-
-handleAuthResult = (authResult) ->
-  console.log("handleAuthResult", authResult)
-
-loadClient = () ->
-  config = {
-    'client_id': clientId,
-    'scope': scopes
-  }
-  gapi.auth.authorize(config, () ->
-    console.log('login complete')
+  worksheetDataUrl: () =>
     token = gapi.auth.getToken().access_token
-    console.log(token)
-    url = 'https://spreadsheets.google.com/feeds/worksheets/' + apiKey + '/private/full?alt=json-in-script&access_token=' + token + '&callback=?'
-    $.getJSON(url, (data) ->
-      console.log("got json")
-      console.log(data)
-    )
-  )
+    url = @scope + "/worksheets/" + @apiKey + "/" + @access + token + "&callback=?";
+    return url
 
-$("#authorize-button").click(loadClient);
+  worksheetUrl: (worksheetId) =>
+    token = gapi.auth.getToken().access_token
+    url = @scope + @apiKey + "/" + worksheetId + @access + token
+    return url
+
+  handleWorksheetData: (jsonData) =>
+    console.log("handleWorksheetData", jsonData)
+    for worksheetData in jsonData.feed.entry
+      sections = worksheetData.id.$t.split("/")
+      id = sections[sections.length - 1]
+      console.log(id, @worksheetUrl(id))
+
+  newApiKey: (key) =>
+    # if @apiKey == key then return
+    console.log("newApiKey", key)
+    @apiKey = key
+    config = {
+      'client_id': @clientId,
+      'scope': @scope
+    }
+    @data = {}
+    gapi.auth.authorize(config, () =>
+      loadUrl(@worksheetDataUrl(), @handleWorksheetData)
+    )
+
+$("#authorize-button").click(() ->
+  m = new Main()
+);
