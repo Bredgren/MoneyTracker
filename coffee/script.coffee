@@ -81,3 +81,6 @@ $("#authorize-button").click(() ->
   m = new Main()
   console.log(m)
 );
+
+handleClientLoad = () ->
+  console.log("handleClientLoad")
