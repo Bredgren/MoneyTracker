@@ -3,6 +3,20 @@ loadUrl = (url, callback) ->
   console.log("fetching", url)
   $.getJSON(url, callback)
 
+class Loader
+  constructor: () ->
+    @sheetsLoading = []
+    @sheetsLoaded = []
+
+  loadingSheet: (name) =>
+    @sheetsLoading.push(name)
+    console.log(@sheetsLoading, @sheetsLoaded)
+
+  loadedSheet: (name) =>
+    @sheetsLoaded.push(name)
+    @sheetsLoading = @sheetsLoading.filter((e) -> e != name)
+    console.log(@sheetsLoading, @sheetsLoaded)
+
 class Main
   scope: "https://spreadsheets.google.com/feeds"
   access: "private/full?alt=json-in-script&access_token="
@@ -58,10 +72,15 @@ class Main
       title = worksheetData.title.$t
       sections = worksheetData.id.$t.split("/")
       id = sections[sections.length - 1]
+      @loader.loadingSheet(title)
       if title == "Categories"
-        loadUrl(@worksheetUrl(id), @handleCategoryWorksheet)
+        loadUrl(@worksheetUrl(id), (data) =>
+          @loader.loadedSheet(title)
+          @handleCategoryWorksheet(data))
       else
-        loadUrl(@worksheetUrl(id), @handleDataWorksheet)
+        loadUrl(@worksheetUrl(id), (data) =>
+          @loader.loadedSheet(title)
+          @handleDataWorksheet(data))
 
   newApiKey: (key) =>
     # if @apiKey == key then return
@@ -73,9 +92,12 @@ class Main
     }
     @data = {}
     @category = {}
+    @loader = new Loader()
     gapi.auth.authorize(config, () =>
-      loadUrl(@worksheetDataUrl(), @handleWorksheetData)
-    )
+      @loader.loadingSheet("Worksheet list")
+      loadUrl(@worksheetDataUrl(), (data) =>
+        @loader.loadedSheet("Worksheet list")
+        @handleWorksheetData(data)))
 
 $("#authorize-button").click(() ->
   m = new Main()
