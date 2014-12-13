@@ -11,13 +11,54 @@
   Loader = (function() {
     function Loader() {
       this.loadedSheet = __bind(this.loadedSheet, this);
-      this.loadingSheet = __bind(this.loadingSheet, this);      this.sheetsLoading = [];
+      this.loadingSheet = __bind(this.loadingSheet, this);
+      this.updateProgress = __bind(this.updateProgress, this);      this.sheetsLoading = [];
       this.sheetsLoaded = [];
+      this.updateProgress();
+      this.count = 0;
     }
 
+    Loader.prototype.updateProgress = function() {
+      var bar, percent, progress, progressBar, sheet, sheetsLoading, span, statusElement, _i, _len, _ref, _results;
+
+      progressBar = $("#loading-progress");
+      statusElement = $("#loading-status");
+      progressBar.attr('aria-valuemax', this.count);
+      progress = 0;
+      if (this.count > 0) {
+        if (statusElement.is(":hidden")) {
+          statusElement.slideDown("fast");
+        }
+        progress = this.sheetsLoaded.length / this.count;
+      }
+      percent = progress * 100;
+      bar = progressBar.find("div");
+      span = progressBar.find("span");
+      bar.attr('aria-valuenow', this.sheetsLoaded.length);
+      bar.css('width', percent + '%');
+      span.text(percent + '% Complete');
+      console.log("percent", percent);
+      if (percent === 100 && this.count > 1) {
+        statusElement.slideUp();
+      }
+      sheetsLoading = $("#sheets-loading");
+      sheetsLoading.empty();
+      _ref = this.sheetsLoading;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sheet = _ref[_i];
+        span = $("<span class='loading-sheet'>");
+        span.text(sheet);
+        _results.push(sheetsLoading.append(span));
+      }
+      return _results;
+    };
+
     Loader.prototype.loadingSheet = function(name) {
+      this.count += 1;
       this.sheetsLoading.push(name);
-      return console.log(this.sheetsLoading, this.sheetsLoaded);
+      console.log(this.sheetsLoading, this.sheetsLoaded);
+      return this.updateProgress();
     };
 
     Loader.prototype.loadedSheet = function(name) {
@@ -25,7 +66,8 @@
       this.sheetsLoading = this.sheetsLoading.filter(function(e) {
         return e !== name;
       });
-      return console.log(this.sheetsLoading, this.sheetsLoaded);
+      console.log(this.sheetsLoading, this.sheetsLoaded);
+      return this.updateProgress();
     };
 
     return Loader;

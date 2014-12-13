@@ -7,15 +7,47 @@ class Loader
   constructor: () ->
     @sheetsLoading = []
     @sheetsLoaded = []
+    @updateProgress()
+    @count = 0
+
+  updateProgress: () =>
+    progressBar = $("#loading-progress");
+    statusElement = $("#loading-status")
+
+    progressBar.attr('aria-valuemax', @count)
+    progress = 0
+    if @count > 0
+      if statusElement.is(":hidden")
+        statusElement.slideDown("fast")
+      progress = @sheetsLoaded.length / @count
+    percent = progress * 100
+    bar = progressBar.find("div");
+    span = progressBar.find("span");
+    bar.attr('aria-valuenow', @sheetsLoaded.length);
+    bar.css('width', percent + '%');
+    span.text(percent + '% Complete');
+    console.log("percent", percent)
+    if percent == 100 and @count > 1
+      statusElement.slideUp()
+
+    sheetsLoading = $("#sheets-loading")
+    sheetsLoading.empty()
+    for sheet in @sheetsLoading
+      span = $("<span class='loading-sheet'>")
+      span.text(sheet)
+      sheetsLoading.append(span)
 
   loadingSheet: (name) =>
+    @count += 1
     @sheetsLoading.push(name)
     console.log(@sheetsLoading, @sheetsLoaded)
+    @updateProgress()
 
   loadedSheet: (name) =>
     @sheetsLoaded.push(name)
     @sheetsLoading = @sheetsLoading.filter((e) -> e != name)
     console.log(@sheetsLoading, @sheetsLoaded)
+    @updateProgress()
 
 class Main
   scope: "https://spreadsheets.google.com/feeds"
