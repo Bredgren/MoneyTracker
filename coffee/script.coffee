@@ -4,7 +4,7 @@ loadUrl = (url, callback) ->
   $.getJSON(url, callback)
 
 class Loader
-  constructor: () ->
+  constructor: (@callback) ->
     @sheetsLoading = []
     @sheetsLoaded = []
     @updateProgress()
@@ -29,6 +29,7 @@ class Loader
     console.log("percent", percent)
     if percent == 100 and @count > 1
       statusElement.slideUp()
+      @callback()
 
     sheetsLoading = $("#sheets-loading")
     sheetsLoading.empty()
@@ -59,10 +60,53 @@ class Main
     @category = {} # Name: string -> { parent: string, recurring: string }
     @data = {} # Date -> { category: string: cost: number, notes: string }
     apiKey = localStorage["apiKey"]
-    console.log(apiKey)
+    $("#start-date").change(@handleDateChange)
+    $("#end-date").change(@handleDateChange)
+
     if apiKey
       $("#api-key-input").val(apiKey)
       @newApiKey(apiKey)
+
+  handleDateChange: () ->
+    start = new Date($("#start-date").val())
+    end = new Date($("#end-date").val())
+    console.log("handleDateChange", start, end)
+    invalidRange = $("#invalid-range")
+    if start > end and invalidRange.is(":hidden")
+      invalidRange.slideDown("fast")
+      return
+    else if start <= end and not invalidRange.is(":hidden")
+      invalidRange.slideUp("fast")
+
+  onFinishLoading: () =>
+    console.log("finished loading", @data)
+    @minDate = null
+    @maxDate = null
+    @dates = []
+    for dateString, data of @data
+      date = data.date
+      if @minDate == null or date < @minDate
+        @minDate = date
+      if @maxDate == null or date > @maxDate
+        @maxDate = date
+      @dates.push(date)
+    @dates.sort((i, j) ->
+      if i.getTime() > j.getTime()
+        return 1
+      else if i.getTime() < j.getTime()
+        return -1
+      else
+        return 0)
+    $("#start-date").empty()
+    $("#end-date").empty()
+    for date in @dates
+      option = $("<option>").text(date.toDateString())
+      $("#start-date").append(option)
+      option = $("<option>").text(date.toDateString())
+      $("#end-date").append(option)
+    $("#start-date").val(@minDate.toDateString())
+    $("#end-date").val(@maxDate.toDateString())
+    @handleDateChange()
 
   worksheetDataUrl: () =>
     token = gapi.auth.getToken().access_token
@@ -88,12 +132,13 @@ class Main
   handleDataWorksheet: (jsonData) =>
     console.log("handleDataWorksheet", jsonData)
     for row in jsonData.feed.entry
-      date = row.gsx$date.$t
+      date = new Date(row.gsx$date.$t)
       category = row.gsx$category.$t
       cost = row.gsx$cost.$t
       notes = row.gsx$notes.$t
       # TODO: check if category is valid?
-      @data[new Date(date)] = {
+      @data[date.toDateString()] = {
+        date: date,
         category: category,
         cost: parseFloat(cost),
         notes: notes
@@ -104,11 +149,11 @@ class Main
     $("#sheet-title").text(jsonData.feed.title.$t)
     getCallback =(title) =>
       return (data) =>
-        @loader.loadedSheet(title)
         if title == "Categories"
           @handleCategoryWorksheet(data)
         else
           @handleDataWorksheet(data)
+        @loader.loadedSheet(title)
     for worksheetData in jsonData.feed.entry
       title = worksheetData.title.$t
       sections = worksheetData.id.$t.split("/")
@@ -127,7 +172,7 @@ class Main
     }
     @data = {}
     @category = {}
-    @loader = new Loader()
+    @loader = new Loader(@onFinishLoading)
     gapi.auth.authorize(config, () =>
       @loader.loadingSheet("Worksheet list")
       loadUrl(@worksheetDataUrl(), (data) =>

@@ -9,10 +9,12 @@
   };
 
   Loader = (function() {
-    function Loader() {
+    function Loader(callback) {
+      this.callback = callback;
       this.loadedSheet = __bind(this.loadedSheet, this);
       this.loadingSheet = __bind(this.loadingSheet, this);
-      this.updateProgress = __bind(this.updateProgress, this);      this.sheetsLoading = [];
+      this.updateProgress = __bind(this.updateProgress, this);
+      this.sheetsLoading = [];
       this.sheetsLoaded = [];
       this.updateProgress();
       this.count = 0;
@@ -40,6 +42,7 @@
       console.log("percent", percent);
       if (percent === 100 && this.count > 1) {
         statusElement.slideUp();
+        this.callback();
       }
       sheetsLoading = $("#sheets-loading");
       sheetsLoading.empty();
@@ -90,17 +93,76 @@
       this.handleCategoryWorksheet = __bind(this.handleCategoryWorksheet, this);
       this.worksheetUrl = __bind(this.worksheetUrl, this);
       this.worksheetDataUrl = __bind(this.worksheetDataUrl, this);
+      this.onFinishLoading = __bind(this.onFinishLoading, this);
       var apiKey;
 
       this.category = {};
       this.data = {};
       apiKey = localStorage["apiKey"];
-      console.log(apiKey);
+      $("#start-date").change(this.handleDateChange);
+      $("#end-date").change(this.handleDateChange);
       if (apiKey) {
         $("#api-key-input").val(apiKey);
         this.newApiKey(apiKey);
       }
     }
+
+    Main.prototype.handleDateChange = function() {
+      var end, invalidRange, start;
+
+      start = new Date($("#start-date").val());
+      end = new Date($("#end-date").val());
+      console.log("handleDateChange", start, end);
+      invalidRange = $("#invalid-range");
+      if (start > end && invalidRange.is(":hidden")) {
+        invalidRange.slideDown("fast");
+      } else if (start <= end && !invalidRange.is(":hidden")) {
+        return invalidRange.slideUp("fast");
+      }
+    };
+
+    Main.prototype.onFinishLoading = function() {
+      var data, date, dateString, option, _i, _len, _ref, _ref1;
+
+      console.log("finished loading", this.data);
+      this.minDate = null;
+      this.maxDate = null;
+      this.dates = [];
+      _ref = this.data;
+      for (dateString in _ref) {
+        data = _ref[dateString];
+        date = data.date;
+        if (this.minDate === null || date < this.minDate) {
+          this.minDate = date;
+        }
+        if (this.maxDate === null || date > this.maxDate) {
+          this.maxDate = date;
+        }
+        this.dates.push(date);
+      }
+      this.dates.sort(function(i, j) {
+        if (i.getTime() > j.getTime()) {
+          return 1;
+        } else if (i.getTime() < j.getTime()) {
+          return -1;
+        } else {
+          return 0;
+        }
+      });
+      $("#start-date").empty();
+      $("#end-date").empty();
+      _ref1 = this.dates;
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        date = _ref1[_i];
+        option = $("<option>").text(date.toDateString());
+        $("#start-date").append(option);
+        option = $("<option>").text(date.toDateString());
+        $("#end-date").append(option);
+      }
+      $("#start-date").val(this.minDate.toDateString());
+      $("#end-date").val(this.maxDate.toDateString());
+      return this.handleDateChange();
+    };
 
     Main.prototype.worksheetDataUrl = function() {
       var token, url;
@@ -145,11 +207,12 @@
       _results = [];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         row = _ref[_i];
-        date = row.gsx$date.$t;
+        date = new Date(row.gsx$date.$t);
         category = row.gsx$category.$t;
         cost = row.gsx$cost.$t;
         notes = row.gsx$notes.$t;
-        _results.push(this.data[new Date(date)] = {
+        _results.push(this.data[date.toDateString()] = {
+          date: date,
           category: category,
           cost: parseFloat(cost),
           notes: notes
@@ -166,12 +229,12 @@
       $("#sheet-title").text(jsonData.feed.title.$t);
       getCallback = function(title) {
         return function(data) {
-          _this.loader.loadedSheet(title);
           if (title === "Categories") {
-            return _this.handleCategoryWorksheet(data);
+            _this.handleCategoryWorksheet(data);
           } else {
-            return _this.handleDataWorksheet(data);
+            _this.handleDataWorksheet(data);
           }
+          return _this.loader.loadedSheet(title);
         };
       };
       _ref = jsonData.feed.entry;
@@ -203,7 +266,7 @@
       };
       this.data = {};
       this.category = {};
-      this.loader = new Loader();
+      this.loader = new Loader(this.onFinishLoading);
       return gapi.auth.authorize(config, function() {
         _this.loader.loadingSheet("Worksheet list");
         return loadUrl(_this.worksheetDataUrl(), function(data) {
