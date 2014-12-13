@@ -20,16 +20,17 @@ class Loader
 class Main
   scope: "https://spreadsheets.google.com/feeds"
   access: "private/full?alt=json-in-script&access_token="
-  clientId: "225160616080-rlae3dprbofq5i1etegg5vdvobf2rhqi.apps.googleusercontent.com"
+  clientId: "172856935415-q064ntcqkmud5m4ub3tj2irri5v9dhs8.apps.googleusercontent.com"
   apiKey: "14OPwgdy9-2uTIS-x5CDMOYcn2Yo2kuML3Fn0tVMdWrA"
 
   constructor: () ->
-    @category = {} # Name: string -> { parent: string, recuring: string }
+    @category = {} # Name: string -> { parent: string, recurring: string }
     @data = {} # Date -> { category: string: cost: number, notes: string }
     apiKey = localStorage["apiKey"]
-    # if apiKey
-    #   @newApiKey(apiKey)
-    @newApiKey(@apiKey)
+    console.log(apiKey)
+    if apiKey
+      $("#api-key-input").val(apiKey)
+      @newApiKey(apiKey)
 
   worksheetDataUrl: () =>
     token = gapi.auth.getToken().access_token
@@ -46,10 +47,10 @@ class Main
     for row in jsonData.feed.entry
       categoryName = row.gsx$categoryname.$t
       parentCategory = row.gsx$parentcategory.$t
-      recuring = row.gsx$recuring.$t
+      recurring = row.gsx$recurring.$t
       @category[categoryName] = {
         parent: parentCategory,
-        recuring: recuring
+        recurring: recurring
       }
 
   handleDataWorksheet: (jsonData) =>
@@ -68,24 +69,25 @@ class Main
 
   handleWorksheetData: (jsonData) =>
     console.log("handleWorksheetData", jsonData)
-    getCallback(title)
+    $("#sheet-title").text(jsonData.feed.title.$t)
+    getCallback =(title) =>
+      return (data) =>
+        @loader.loadedSheet(title)
+        if title == "Categories"
+          @handleCategoryWorksheet(data)
+        else
+          @handleDataWorksheet(data)
     for worksheetData in jsonData.feed.entry
       title = worksheetData.title.$t
       sections = worksheetData.id.$t.split("/")
       id = sections[sections.length - 1]
       @loader.loadingSheet(title)
-      if title == "Categories"
-        loadUrl(@worksheetUrl(id), (data) =>
-          @loader.loadedSheet(title)
-          @handleCategoryWorksheet(data))
-      else
-        loadUrl(@worksheetUrl(id), (data) =>
-          @loader.loadedSheet(title)
-          @handleDataWorksheet(data))
+      loadUrl(@worksheetUrl(id),getCallback(title))
 
   newApiKey: (key) =>
-    # if @apiKey == key then return
+    if @apiKey == key then return
     console.log("newApiKey", key)
+    localStorage["apiKey"] = key
     @apiKey = key
     config = {
       'client_id': @clientId,
@@ -100,10 +102,14 @@ class Main
         @loader.loadedSheet("Worksheet list")
         @handleWorksheetData(data)))
 
-$("#authorize-button").click(() ->
-  m = new Main()
-  console.log(m)
+main = null
+
+$("#load-button").click(() ->
+  handleClientLoad()
+  main.newApiKey($("#api-key-input").val())
 );
 
 handleClientLoad = () ->
   console.log("handleClientLoad")
+  main = new Main()
+  console.log(main)
