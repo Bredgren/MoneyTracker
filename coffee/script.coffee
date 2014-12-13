@@ -58,7 +58,7 @@ class Main
 
   constructor: () ->
     @category = {} # Name: string -> { parent: string, recurring: string }
-    @data = {} # Date -> { category: string: cost: number, notes: string }
+    @data = [] # { date: Date, category: string, cost: number, notes: string }
     apiKey = localStorage["apiKey"]
     $("#start-date").change(@handleDateChange)
     $("#end-date").change(@handleDateChange)
@@ -78,13 +78,51 @@ class Main
     else if start <= end and not invalidRange.is(":hidden")
       invalidRange.slideUp("fast")
 
+    spentTotals = {}
+    totalSpent = 0
+    earnedTotals = {}
+    totalEarned = 0
+    for entry in @data
+      date = entry.date
+      if start <= date <= end
+        if entry.cost < 0
+          if not spentTotals[entry.category]
+            spentTotals[entry.category] = 0
+          amount = Math.abs(entry.cost)
+          spentTotals[entry.category] += amount
+          totalSpent += amount
+        else
+          if not earnedTotals[entry.category]
+            earnedTotals[entry.category] = 0
+          earnedTotals[entry.category] += entry.cost
+          totalEarned += entry.cost
+
+    pieDataArray = [[category, cost] for category, cost of spentTotals][0]
+    pieDataArray.unshift(["Category", "Cost"])
+    console.log(pieDataArray)
+    pieData = google.visualization.arrayToDataTable(pieDataArray)
+    options = {
+      title: "Total Spent: " + totalSpent,
+    }
+    chart = new google.visualization.PieChart(document.getElementById("pie-total-spent"))
+    chart.draw(pieData, options)
+
+    pieDataArray = [[category, cost] for category, cost of earnedTotals][0]
+    pieDataArray.unshift(["Category", "Cost"])
+    pieData = google.visualization.arrayToDataTable(pieDataArray)
+    options = {
+      title: "Total Earned: " + totalEarned,
+    }
+    chart = new google.visualization.PieChart(document.getElementById("pie-total-earned"))
+    chart.draw(pieData, options)
+
   onFinishLoading: () =>
     console.log("finished loading", @data)
     @minDate = null
     @maxDate = null
     @dates = []
-    for dateString, data of @data
-      date = data.date
+    for entry in @data
+      date = entry.date
       if @minDate == null or date < @minDate
         @minDate = date
       if @maxDate == null or date > @maxDate
@@ -134,15 +172,15 @@ class Main
     for row in jsonData.feed.entry
       date = new Date(row.gsx$date.$t)
       category = row.gsx$category.$t
-      cost = row.gsx$cost.$t
+      cost = row.gsx$cost.$t.replace("$", "").replace(",", "")
       notes = row.gsx$notes.$t
       # TODO: check if category is valid?
-      @data[date.toDateString()] = {
+      @data.push({
         date: date,
         category: category,
         cost: parseFloat(cost),
         notes: notes
-      }
+      })
 
   handleWorksheetData: (jsonData) =>
     console.log("handleWorksheetData", jsonData)
@@ -170,7 +208,7 @@ class Main
       'client_id': @clientId,
       'scope': @scope
     }
-    @data = {}
+    @data = []
     @category = {}
     @loader = new Loader(@onFinishLoading)
     gapi.auth.authorize(config, () =>
@@ -182,9 +220,15 @@ class Main
 main = null
 
 $("#load-button").click(() ->
-  handleClientLoad()
   main.newApiKey($("#api-key-input").val())
 );
+
+google.load("visualization", "1", {packages:["corechart"]})
+
+google.setOnLoadCallback(() ->
+  console.log("onLoad")
+  main = new Main()
+  console.log(main))
 
 handleClientLoad = () ->
   console.log("handleClientLoad")

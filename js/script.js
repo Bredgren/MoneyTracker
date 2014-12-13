@@ -97,7 +97,7 @@
       var apiKey;
 
       this.category = {};
-      this.data = {};
+      this.data = [];
       apiKey = localStorage["apiKey"];
       $("#start-date").change(this.handleDateChange);
       $("#end-date").change(this.handleDateChange);
@@ -108,7 +108,7 @@
     }
 
     Main.prototype.handleDateChange = function() {
-      var end, invalidRange, start;
+      var amount, category, chart, cost, date, earnedTotals, end, entry, invalidRange, options, pieData, pieDataArray, spentTotals, start, totalEarned, totalSpent, _i, _len, _ref;
 
       start = new Date($("#start-date").val());
       end = new Date($("#end-date").val());
@@ -116,22 +116,87 @@
       invalidRange = $("#invalid-range");
       if (start > end && invalidRange.is(":hidden")) {
         invalidRange.slideDown("fast");
+        return;
       } else if (start <= end && !invalidRange.is(":hidden")) {
-        return invalidRange.slideUp("fast");
+        invalidRange.slideUp("fast");
       }
+      spentTotals = {};
+      totalSpent = 0;
+      earnedTotals = {};
+      totalEarned = 0;
+      _ref = this.data;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        entry = _ref[_i];
+        date = entry.date;
+        if ((start <= date && date <= end)) {
+          if (entry.cost < 0) {
+            if (!spentTotals[entry.category]) {
+              spentTotals[entry.category] = 0;
+            }
+            amount = Math.abs(entry.cost);
+            spentTotals[entry.category] += amount;
+            totalSpent += amount;
+          } else {
+            if (!earnedTotals[entry.category]) {
+              earnedTotals[entry.category] = 0;
+            }
+            earnedTotals[entry.category] += entry.cost;
+            totalEarned += entry.cost;
+          }
+        }
+      }
+      pieDataArray = [
+        (function() {
+          var _results;
+
+          _results = [];
+          for (category in spentTotals) {
+            cost = spentTotals[category];
+            _results.push([category, cost]);
+          }
+          return _results;
+        })()
+      ][0];
+      pieDataArray.unshift(["Category", "Cost"]);
+      console.log(pieDataArray);
+      pieData = google.visualization.arrayToDataTable(pieDataArray);
+      options = {
+        title: "Total Spent: " + totalSpent
+      };
+      chart = new google.visualization.PieChart(document.getElementById("pie-total-spent"));
+      chart.draw(pieData, options);
+      pieDataArray = [
+        (function() {
+          var _results;
+
+          _results = [];
+          for (category in earnedTotals) {
+            cost = earnedTotals[category];
+            _results.push([category, cost]);
+          }
+          return _results;
+        })()
+      ][0];
+      pieDataArray.unshift(["Category", "Cost"]);
+      pieData = google.visualization.arrayToDataTable(pieDataArray);
+      options = {
+        title: "Total Earned: " + totalEarned
+      };
+      chart = new google.visualization.PieChart(document.getElementById("pie-total-earned"));
+      return chart.draw(pieData, options);
     };
 
     Main.prototype.onFinishLoading = function() {
-      var data, date, dateString, option, _i, _len, _ref, _ref1;
+      var date, entry, option, _i, _j, _len, _len1, _ref, _ref1;
 
       console.log("finished loading", this.data);
       this.minDate = null;
       this.maxDate = null;
       this.dates = [];
       _ref = this.data;
-      for (dateString in _ref) {
-        data = _ref[dateString];
-        date = data.date;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        entry = _ref[_i];
+        date = entry.date;
         if (this.minDate === null || date < this.minDate) {
           this.minDate = date;
         }
@@ -152,8 +217,8 @@
       $("#start-date").empty();
       $("#end-date").empty();
       _ref1 = this.dates;
-      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-        date = _ref1[_i];
+      for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+        date = _ref1[_j];
         option = $("<option>").text(date.toDateString());
         $("#start-date").append(option);
         option = $("<option>").text(date.toDateString());
@@ -209,14 +274,14 @@
         row = _ref[_i];
         date = new Date(row.gsx$date.$t);
         category = row.gsx$category.$t;
-        cost = row.gsx$cost.$t;
+        cost = row.gsx$cost.$t.replace("$", "").replace(",", "");
         notes = row.gsx$notes.$t;
-        _results.push(this.data[date.toDateString()] = {
+        _results.push(this.data.push({
           date: date,
           category: category,
           cost: parseFloat(cost),
           notes: notes
-        });
+        }));
       }
       return _results;
     };
@@ -264,7 +329,7 @@
         'client_id': this.clientId,
         'scope': this.scope
       };
-      this.data = {};
+      this.data = [];
       this.category = {};
       this.loader = new Loader(this.onFinishLoading);
       return gapi.auth.authorize(config, function() {
@@ -283,8 +348,17 @@
   main = null;
 
   $("#load-button").click(function() {
-    handleClientLoad();
     return main.newApiKey($("#api-key-input").val());
+  });
+
+  google.load("visualization", "1", {
+    packages: ["corechart"]
+  });
+
+  google.setOnLoadCallback(function() {
+    console.log("onLoad");
+    main = new Main();
+    return console.log(main);
   });
 
   handleClientLoad = function() {
