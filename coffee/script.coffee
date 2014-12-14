@@ -50,6 +50,56 @@ class Loader
     console.log(@sheetsLoading, @sheetsLoaded)
     @updateProgress()
 
+class PieChart
+  constructor: (@main, @spent, elementId) ->
+    @categoryStack = []
+    @chart = new google.visualization.PieChart(document.getElementById(elementId))
+
+  gotoParentCategory: () ->
+    current = @categoryStack.pop()
+    parent = @categoryStac.pop()
+    @setCategory(parent)
+
+  getTotal: (category, start, end) ->
+    total = 0
+
+    for entry in @main.data
+      date = entry.date
+      inRange = start <= date <= end
+      rightCategory = entry.category == category
+      rightSign = (entry.cost < 0 and @spent) or (entry.cost > 0 and not @spent)
+      if inRange and rightCategory and rightSign
+        amount = Math.abs(entry.cost)
+        total += amount
+
+    children = @main.category[category]
+    if children
+      for child in children
+        total += @getTotal(child, start, end)
+    return total
+
+  setCategory: (category) ->
+    @categoryStack.push(category)
+    children = @main.category[category]
+
+    start = new Date($("#start-date").val())
+    end = new Date($("#end-date").val())
+
+    totals = {}
+    total = 0
+    for child in children
+      amount = @getTotal(child, start, end)
+      totals[child] = amount
+      total += amount
+
+    pieDataArray = [[category, cost] for category, cost of totals][0]
+    pieDataArray.unshift(["Category", "Cost"])
+    pieData = google.visualization.arrayToDataTable(pieDataArray)
+    options = {
+      title: "Total " + (if @spent then "Spent" else "Earned") + ": " + total
+    }
+    @chart.draw(pieData, options)
+
 class Main
   scope: "https://spreadsheets.google.com/feeds"
   access: "private/full?alt=json-in-script&access_token="
@@ -57,17 +107,19 @@ class Main
   apiKey: "14OPwgdy9-2uTIS-x5CDMOYcn2Yo2kuML3Fn0tVMdWrA"
 
   constructor: () ->
-    @category = {} # Name: string -> { parent: string, recurring: string }
+    @category = {} # parent: string -> [ child: string, ... ]
     @data = [] # { date: Date, category: string, cost: number, notes: string }
     apiKey = localStorage["apiKey"]
     $("#start-date").change(@handleDateChange)
     $("#end-date").change(@handleDateChange)
+    @spentChart = new PieChart(@, true, "pie-total-spent")
+    @earnedChart = new PieChart(@, false, "pie-total-earned")
 
     if apiKey
       $("#api-key-input").val(apiKey)
       @newApiKey(apiKey)
 
-  handleDateChange: () ->
+  handleDateChange: () =>
     start = new Date($("#start-date").val())
     end = new Date($("#end-date").val())
     console.log("handleDateChange", start, end)
@@ -78,43 +130,46 @@ class Main
     else if start <= end and not invalidRange.is(":hidden")
       invalidRange.slideUp("fast")
 
-    spentTotals = {}
-    totalSpent = 0
-    earnedTotals = {}
-    totalEarned = 0
-    for entry in @data
-      date = entry.date
-      if start <= date <= end
-        if entry.cost < 0
-          if not spentTotals[entry.category]
-            spentTotals[entry.category] = 0
-          amount = Math.abs(entry.cost)
-          spentTotals[entry.category] += amount
-          totalSpent += amount
-        else
-          if not earnedTotals[entry.category]
-            earnedTotals[entry.category] = 0
-          earnedTotals[entry.category] += entry.cost
-          totalEarned += entry.cost
+    @spentChart.setCategory("all")
+    @earnedChart.setCategory("all")
 
-    pieDataArray = [[category, cost] for category, cost of spentTotals][0]
-    pieDataArray.unshift(["Category", "Cost"])
-    console.log(pieDataArray)
-    pieData = google.visualization.arrayToDataTable(pieDataArray)
-    options = {
-      title: "Total Spent: " + totalSpent,
-    }
-    chart = new google.visualization.PieChart(document.getElementById("pie-total-spent"))
-    chart.draw(pieData, options)
+    # spentTotals = {}
+    # totalSpent = 0
+    # earnedTotals = {}
+    # totalEarned = 0
+    # for entry in @data
+    #   date = entry.date
+    #   if start <= date <= end
+    #     if entry.cost < 0
+    #       if not spentTotals[entry.category]
+    #         spentTotals[entry.category] = 0
+    #       amount = Math.abs(entry.cost)
+    #       spentTotals[entry.category] += amount
+    #       totalSpent += amount
+    #     else
+    #       if not earnedTotals[entry.category]
+    #         earnedTotals[entry.category] = 0
+    #       earnedTotals[entry.category] += entry.cost
+    #       totalEarned += entry.cost
 
-    pieDataArray = [[category, cost] for category, cost of earnedTotals][0]
-    pieDataArray.unshift(["Category", "Cost"])
-    pieData = google.visualization.arrayToDataTable(pieDataArray)
-    options = {
-      title: "Total Earned: " + totalEarned,
-    }
-    chart = new google.visualization.PieChart(document.getElementById("pie-total-earned"))
-    chart.draw(pieData, options)
+    # pieDataArray = [[category, cost] for category, cost of spentTotals][0]
+    # pieDataArray.unshift(["Category", "Cost"])
+    # console.log(pieDataArray)
+    # pieData = google.visualization.arrayToDataTable(pieDataArray)
+    # options = {
+    #   title: "Total Spent: " + totalSpent,
+    # }
+    # chart = new google.visualization.PieChart(document.getElementById("pie-total-spent"))
+    # chart.draw(pieData, options)
+
+    # pieDataArray = [[category, cost] for category, cost of earnedTotals][0]
+    # pieDataArray.unshift(["Category", "Cost"])
+    # pieData = google.visualization.arrayToDataTable(pieDataArray)
+    # options = {
+    #   title: "Total Earned: " + totalEarned,
+    # }
+    # chart = new google.visualization.PieChart(document.getElementById("pie-total-earned"))
+    # chart.draw(pieData, options)
 
   onFinishLoading: () =>
     console.log("finished loading", @data)
@@ -160,12 +215,13 @@ class Main
     console.log("handleCategoryWorksheet", jsonData)
     for row in jsonData.feed.entry
       categoryName = row.gsx$categoryname.$t
-      parentCategory = row.gsx$parentcategory.$t
-      recurring = row.gsx$recurring.$t
-      @category[categoryName] = {
-        parent: parentCategory,
-        recurring: recurring
-      }
+      parent = row.gsx$parentcategory.$t
+      if not parent
+        parent = "all"
+      if not @category[parent]
+        @category[parent] = []
+      @category[parent].push(categoryName)
+    console.log(@category)
 
   handleDataWorksheet: (jsonData) =>
     console.log("handleDataWorksheet", jsonData)
@@ -174,7 +230,6 @@ class Main
       category = row.gsx$category.$t
       cost = row.gsx$cost.$t.replace("$", "").replace(",", "")
       notes = row.gsx$notes.$t
-      # TODO: check if category is valid?
       @data.push({
         date: date,
         category: category,
